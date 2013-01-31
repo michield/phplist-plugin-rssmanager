@@ -12,6 +12,18 @@ class rssmanager extends phplistPlugin {
     'getrss'
   );
   private $rssMessages = array();
+  
+  public $topMenuLinks = array(
+    'getrss' => array('category' => 'system'),
+    'viewrss' => array('category' => 'campaigns'),
+    'purgerss' => array('category' => 'system'),
+  );
+  
+  public $pageTitles = array(
+    "getrss" => "Fetch RSS entries",
+    "viewrss" => "View RSS entries",
+    "purgerss" => "Remove outdated RSS entries",
+  );
 
   var $DBstruct= array ( 
   'rssitem'    => array ( 
