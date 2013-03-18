@@ -106,7 +106,7 @@ class rssmanager extends phplistPlugin {
       return null;
     if (Sql_Table_exists($GLOBALS['tables']['rssitem'])) {
       $menuitems= array ();
-      if (MANUALLY_PROCESS_RSS) {
+      if (defined('MANUALLY_PROCESS_RSS') && MANUALLY_PROCESS_RSS) {
         $menuitems += array (
           'getrss' => $GLOBALS['I18N']->get('Get RSS feeds'
         ));
