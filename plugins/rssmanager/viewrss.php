@@ -5,16 +5,17 @@ if (isset($_GET['start'])) {
 } else {
   $start = 0;
 }
+$pl = $GLOBALS['plugins']['rssmanager'];
 
 if ($GLOBALS["require_login"] && !isSuperUser()) {
   $access = accessLevel("viewrss");
-  $querytables = $tables["rssitem"] . ',' . $tables["list"];
+  $querytables = $pl->tables["rssitem"] . ',' . $pl->tables["list"];
   switch ($access) {
     case "owner" :
-      $subselect = "where " . $tables["rssitem"] . ".list = " . $tables["list"] . ".id and " . $tables["list"] . ".owner = " . $_SESSION["logindetails"]["id"];
+      $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $tables["list"] . ".id and " . $tables["list"] . ".owner = " . $_SESSION["logindetails"]["id"];
       if ($_GET["id"]) {
         $pagingurl = '&id=' . $_GET["id"];
-        $subselect .= " and " . $tables["rssitem"] . ".list = " . $_GET["id"];
+        $subselect .= " and " . $pl->tables["rssitem"] . ".list = " . $_GET["id"];
         print "RSS items for " . ListName($_GET["id"]) . "<br/>";
       }
       break;
@@ -23,15 +24,15 @@ if ($GLOBALS["require_login"] && !isSuperUser()) {
       break;
     case "none" :
     default :
-      $subselect = "where " . $tables["rssitem"] . ".list = " . $tables["list"] . ".id and " . $tables["list"] . ".owner = 0";
+      $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $tables["list"] . ".id and " . $tables["list"] . ".owner = 0";
       break;
   }
 } else {
-  $querytables = $tables["rssitem"];
+  $querytables = $pl->tables["rssitem"];
   $subselect = "";
   if (isset($_GET["id"]) && $_GET["id"]) {
     $pagingurl = '&id=' . $_GET["id"];
-    $subselect = "where " . $tables["rssitem"] . ".list = " . $_GET["id"];
+    $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $_GET["id"];
     print "RSS items for " . ListName($_GET["id"]) . "<br/>";
   }
 }
@@ -39,6 +40,10 @@ if ($GLOBALS["require_login"] && !isSuperUser()) {
 $req = Sql_query("select count(*) FROM $querytables $subselect");
 $total_req = Sql_Fetch_Row($req);
 $total = $total_req[0];
+if ($total <= 0) {
+  print s('No RSS entries found');
+}
+
 if (isset ($start) && $start > 0) {
   $listing = "Listing item $start to " . ($start +MAX_MSG_PP);
   $limit = "limit $start," . MAX_MSG_PP;

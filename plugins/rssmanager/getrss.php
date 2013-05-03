@@ -2,6 +2,8 @@
 
 if (!defined('PHPLISTINIT')) exit;
 
+$pl = $GLOBALS['plugins']['rssmanager'];
+
 if (!$GLOBALS['commandline']) {
   ob_end_flush();
   if (!MANUALLY_PROCESS_RSS) {
@@ -107,25 +109,25 @@ while ($feed = Sql_Fetch_Row($req)) {
         ProcessError($GLOBALS['I18N']->get('Process Killed by other process'));
       $itemcount++;
       Sql_Query(sprintf('SELECT * FROM %s WHERE title = "%s" AND link = "%s" AND list = "%s"', 
-        $tables["rssitem"], addslashes(substr($item["title"], 0, 100)), 
+        $pl->tables["rssitem"], addslashes(substr($item["title"], 0, 100)), 
         addslashes(substr($item["link"], 0, 100)), addslashes($feed[1])));
       if (!Sql_Affected_Rows()) {
         $newitemcount++;
         Sql_Query(sprintf(
           'INSERT INTO %s (title,link,source,list,added) ' .
-          'VALUES("%s","%s","%s",%d,current_timestamp)', $tables["rssitem"], addslashes($item["title"]), 
+          'VALUES("%s","%s","%s",%d,current_timestamp)', $pl->tables["rssitem"], addslashes($item["title"]), 
           addslashes($item['link']), addslashes($feed[0]), $feed[1]));
-        $itemid = Sql_Insert_Id($tables['rssitem'], 'id');
+        $itemid = Sql_Insert_Id($pl->tables['rssitem'], 'id');
         foreach ($item as $key => $val) {
           if ($key != 'title' && $key != 'link') {
             Sql_Query(sprintf(
               'INSERT INTO %s (itemid,tag,data) ' .
-              'VALUES("%s","%s","%s")', $tables["rssitem_data"], $itemid, $key, addslashes($val)));
+              'VALUES("%s","%s","%s")', $pl->tables["rssitem_data"], $itemid, $key, addslashes($val)));
           }
         }
       }
     }
-    output(sprintf('<br/>%d %s, %d %s', $itemcount, $GLOBALS['I18N']->get('items'), $newitemcount, $GLOBALS['I18N']->get('new items')));
+    output(sprintf('<br/>%d %s, %d %s', $itemcount, s('items'), $newitemcount, s('new items')));
     $report .= sprintf('%d items, %d new items' . "\n", $itemcount, $newitemcount);
     $mailreport .= sprintf('-> %d items, %d new items' . "\n", $itemcount, $newitemcount);
   }
@@ -133,10 +135,10 @@ while ($feed = Sql_Fetch_Row($req)) {
   # purpose unkown #@B@ Remove in 2.11 if no purpose found
   Sql_Query(sprintf(
     'INSERT INTO %s (listid,type,entered,info) ' .
-    'VALUES(%d,"retrieval",current_timestamp,"%s")', $tables["listrss"], $feed[1], $report));
+    'VALUES(%d,"retrieval",current_timestamp,"%s")', $pl->tables["listrss"], $feed[1], $report));
   logEvent($report);
 }
 if ($nothingtodo) {
-  print $GLOBALS['I18N']->get('Nothing to do');
+  print s('Nothing to do');
 }
 ?>
