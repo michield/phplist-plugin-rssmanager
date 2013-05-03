@@ -1,5 +1,10 @@
-<script language="Javascript" src="js/jslib.js" type="text/javascript"></script>
 <?php
+
+if (isset($_GET['start'])) {
+  $start = sprintf('%d',$_GET['start']);
+} else {
+  $start = 0;
+}
 
 if ($GLOBALS["require_login"] && !isSuperUser()) {
   $access = accessLevel("viewrss");
@@ -31,7 +36,7 @@ if ($GLOBALS["require_login"] && !isSuperUser()) {
   }
 }
 
-$req = Sql_query("SELECT count(*) FROM $querytables $subselect");
+$req = Sql_query("select count(*) FROM $querytables $subselect");
 $total_req = Sql_Fetch_Row($req);
 $total = $total_req[0];
 if (isset ($start) && $start > 0) {
@@ -42,45 +47,49 @@ if (isset ($start) && $start > 0) {
   $limit = "limit 0," . MAX_MSG_PP;
   $start = 0;
 }
-print $total . " RSS Items</p>";
-if (!isset($pagingurl)) { $pagingurl= ""; }
-if ($total)
-  printf('<table border=1><tr><td colspan=4 align=center>%s</td></tr><tr><td>%s</td><td>%s</td><td>
-            %s</td><td>%s</td></tr></table><p><hr/>', $listing, PageLink2("viewrss$pagingurl", "&lt;&lt;", "start=0"), PageLink2("viewrss$pagingurl", "&lt;", sprintf('start=%d', max(0, $start -MAX_MSG_PP))), PageLink2("viewrss$pagingurl", "&gt;", sprintf('start=%d', min($total, $start +MAX_MSG_PP))), PageLink2("viewrss$pagingurl", "&gt;&gt;", sprintf('start=%d', $total -MAX_MSG_PP)));
-?>
-<table border=1>
-
-<?php
-
+$paging = '';
+if ($total > MAX_MSG_PP) {
+  $paging = simplePaging("viewrss",$start,$total,MAX_MSG_PP,s("RSS items"));
+}
+  
+$ls = new WebblerListing(s('RSS items'));
+$ls->usePanel($paging);
 
 if ($total) {
-  print "<td>Item info</td><td>Status</td><td>More</td></tr>";
   $result = Sql_query("SELECT * FROM $querytables $subselect order by added desc $limit");
   while ($rss = Sql_fetch_array($result)) {
-    #   $uniqueviews = Sql_Fetch_Row_Query("select count(userid) from {$tables["usermessage"]} where viewed is not null and messageid = ".$msg["id"]);
-    printf('<tr><td valign="top"><table>
-          <tr><td valign="top"><b>Title</b>:</td><td valign="top">%s</td></tr>
-          <tr><td valign="top"><b>Link</b>:</td><td valign="top"><a href="%s" target="_blank">%s</a></td></tr>
-          <tr><td valign="top"><b>Source</b>:</td><td valign="top">%s</td></tr>
-          <tr><td valign="top"><b>Date Added</b>:</td><td valign="top">%s</td></tr>
-          </table>
-          </td>', $rss["title"], $rss["link"], $rss["link"], str_replace("&", "& ", $rss["source"]), $rss["added"]);
+    
+    $item = '<a href="'.$rss['link'].'">'.$rss['title']. '</a>';
+    $ls->addElement($item);
+    $ls->addColumn($item,s('Source'),str_replace("&", "& ", $rss["source"]));
+    $ls->addColumn($item,s('Date Added'),$rss['added']);
 
-    $status = sprintf('<table border=1>
-          <tr><td>Processed</td><td>%d</td></tr>
-          <tr><td>Text</td><td>%d</td></tr>
-          <tr><td>HTML</td><td>%d</td></tr>
-          </table>', $rss["processed"], $rss["astext"], $rss["ashtml"]);
-    print '<td valign="top">' . $status . '</td>';
-    print '<td valign=top><table>';
-    $data_req = Sql_Query(sprintf('select * from %s where tag != "title" and tag != "link" and itemid = %d', $tables["rssitem_data"], $rss["id"]));
-    while ($data = Sql_Fetch_ArraY($data_req)) {
-      printf('<tr><td valign=top><b>%s</b></td></td></tr><tr><td valign=top>%s</td></tr>', $data["tag"], $data["data"]);
-    }
-    print '</table></td>';
-    print '</tr>';
+    
+    #   $uniqueviews = Sql_Fetch_Row_Query("select count(userid) from {$tables["usermessage"]} where viewed is not null and messageid = ".$msg["id"]);
+    //printf('<tr><td valign="top"><table>
+          //<tr><td valign="top"><b>Title</b>:</td><td valign="top">%s</td></tr>
+          //<tr><td valign="top"><b>Link</b>:</td><td valign="top"><a href="%s" target="_blank">%s</a></td></tr>
+          //<tr><td valign="top"><b>Source</b>:</td><td valign="top">%s</td></tr>
+          //<tr><td valign="top"><b>Date Added</b>:</td><td valign="top">%s</td></tr>
+          //</table>
+          //</td>', $rss["title"], $rss["link"], $rss["link"], str_replace("&", "& ", $rss["source"]), $rss["added"]);
+
+    //$status = sprintf('<table border=1>
+          //<tr><td>Processed</td><td>%d</td></tr>
+          //<tr><td>Text</td><td>%d</td></tr>
+          //<tr><td>HTML</td><td>%d</td></tr>
+          //</table>', $rss["processed"], $rss["astext"], $rss["ashtml"]);
+    //print '<td valign="top">' . $status . '</td>';
+    //print '<td valign=top><table>';
+    //$data_req = Sql_Query(sprintf('select * from %s where tag != "title" and tag != "link" and itemid = %d', $tables["rssitem_data"], $rss["id"]));
+    //while ($data = Sql_Fetch_Array($data_req)) {
+      //printf('<tr><td valign=top><b>%s</b></td></td></tr><tr><td valign=top>%s</td></tr>', $data["tag"], $data["data"]);
+    //}
+    //print '</table></td>';
+    //print '</tr>';
   }
+  print $ls->display();
+  
 }
 ?>
 
-</table>

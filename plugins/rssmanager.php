@@ -1,14 +1,15 @@
 <?php
+
 class rssmanager extends phplistPlugin {
   ############################################################
   # Registration & Config
   
-  var $name= 'Rss Manager';
-  var $version= "2.0";
-  var $authors= "phpList ltd";  
-  var $coderoot= 'rssmanager/';
-  var $enabled= 0;
-  var $commandlinePluginPages= array (
+  public $name= 'Rss Manager';
+  public $version= "3.0";
+  public $authors= "phpList ltd";  
+  public $coderoot= 'rssmanager/';
+  public $enabled= 0;
+  public $commandlinePluginPages= array (
     'getrss'
   );
   private $rssMessages = array();
@@ -17,12 +18,14 @@ class rssmanager extends phplistPlugin {
     'getrss' => array('category' => 'system'),
     'viewrss' => array('category' => 'campaigns'),
     'purgerss' => array('category' => 'system'),
+    'delrss' => array('category' => 'develop'),
   );
   
   public $pageTitles = array(
     "getrss" => "Fetch RSS entries",
     "viewrss" => "View RSS entries",
     "purgerss" => "Remove outdated RSS entries",
+    'delrss' => 'Delete RSS entries from DB',
   );
 
   var $DBstruct= array ( 
@@ -60,27 +63,89 @@ class rssmanager extends phplistPlugin {
     'index_1'          => array ( 'listididx (listid)', '' ),
     'index_2'          => array ( 'enteredidx (entered)', '' ),
     ) 
-);
+  );
+ 
+  public $settings = array(
+    "rssmanager_threshold" => array (
+      'value' => 4,
+      'description' => 'Minimum amount of items to send in an RSS feed',
+      'type' => "integer",
+      'allowempty' => 0,
+      'min' => 1,
+      'max' => 50,
+      'category'=> 'composition',
+    ),
+    "rssmanager_max" => array (
+      'value' => 30,
+      'description' => 'Maximum amount of items to send in an RSS feed',
+      'type' => "integer",
+      'allowempty' => 0,
+      'min' => 1,
+      'max' => 50,
+      'category'=> 'composition',
+    ),
+    "rssmanager_texttemplate" => array (
+      'value' => '
+      [title]
+      [description]
+      URL: [link]
+      ',
+      'description' => 'Template for text item in RSS feeds',
+      'type' => "textarea",
+      'category'=> 'composition',
+    ),
+    "rssmanager_htmltemplate" => array (
+      'value' => '<br/>
+      <a href="[link]"><b>[title]</b></a><br/>
+      <p class="information">[description]</p>
+      <hr/>',
+      'description' => 'Template for HTML item in RSS feeds',
+      'type' => "textarea",
+      'allowempty' => 1,
+      'category'=> 'composition',
+    ),
+    "rssmanager_textseparatortemplate" => array (
+      'value' => '
+      **** [listname] ******
+    
+      ',
+      'description' => 'Template for separator between feeds in RSS feeds (text)',
+      'type' => "text",
+      'allowempty' => 1,
+      'category'=> 'composition',
+    ),
+    "rssmanager_htmlseparatortemplate" => array (
+      'value' => '<br/>
+      <h3>[listname]</h3>
+       ',
+      'description' => 'Template for separator between feeds in RSS feeds (HTML)',
+      'type' => "text",
+      'allowempty' => 1,
+      'category'=> 'composition',
+    ),
+  );
 
   //  var $configvars= array (
   //  # config var    array( type, name )
   //  );
 
-  function rssmanager() {
+  function __construct() {
     parent :: phplistplugin();
     $this->coderoot = dirname(__FILE__).'/rssmanager/';
+    if (!defined('MANUALLY_PROCESS_RSS')) define('MANUALLY_PROCESS_RSS',1);
   }
 
   function activate() {
     parent :: activate();
+    
 
     $GLOBALS['rssfrequencies']= array (
         #  'hourly' => $strHourly, # to be added at some other point
-      'daily' => $GLOBALS['I18N']->get('Daily'),
-      'weekly' => $GLOBALS['I18N']->get('Weekly'),
-      'monthly' => $GLOBALS['I18N']->get('Monthly'));
+      'daily' => s('Daily'),
+      'weekly' => s('Weekly'),
+      'monthly' => s('Monthly'));
       if ( phplistPlugin::isEnabled('rssmanager')  && !function_exists("xml_parse") && WARN_ABOUT_PHP_SETTINGS)
-        Warn($GLOBALS['I18N']->get('noxml'));
+        Warn(s('noxml'));
     return true;
   }
 
@@ -92,7 +157,7 @@ class rssmanager extends phplistPlugin {
   }
 
   function sendFormats() {
-    return array('rss' => 'RSS');
+   # return array('rss' => 'RSS');
   }
 
   function displayAbout() {
@@ -108,15 +173,15 @@ class rssmanager extends phplistPlugin {
       $menuitems= array ();
       if (defined('MANUALLY_PROCESS_RSS') && MANUALLY_PROCESS_RSS) {
         $menuitems += array (
-          'getrss' => $GLOBALS['I18N']->get('Get RSS feeds'
+          'getrss' => s('Get RSS feeds'
         ));
       }
       $menuitems += array (
-        'viewrss' => $GLOBALS['I18N']->get('View RSS items'),
-      'purgerss' => $GLOBALS['I18N']->get('Purge RSS items'));
+        'viewrss' => s('View RSS items'),
+      'purgerss' => s('Purge RSS items'));
     } else {
       $menuitems= array (
-        'initialise' => $GLOBALS['I18N']->get('Initialise rssmanager'
+        'initialise' => s('Initialise rssmanager'
       ));
     }
     return $menuitems;
@@ -182,9 +247,10 @@ class rssmanager extends phplistPlugin {
 
     global $rssfrequencies;
 
-    $nippet= $GLOBALS['I18N']->get('rssintro');
+    $nippet= s('If you want to use this message as the template for sending RSS feeds
+    select the frequency it should be used for and use [RSS] in your message to indicate where the list of items needs to go.');
     $nippet .= '<br />';
-    $nippet .= '<input type=radio name="rsstemplate" value="none">' . $GLOBALS['I18N']->get('No RSS') . ' ';
+    $nippet .= '<input type=radio name="rsstemplate" value="none">' . s('No RSS') . ' ';
     foreach ($rssfrequencies as $key => $val) {
       $nippet .= sprintf('<input type=radio name="rsstemplate" value="%s" %s>%s ', $key, $data['rsstemplate'] == $key ? 'checked' : '', $val);
     }
@@ -236,7 +302,6 @@ class rssmanager extends phplistPlugin {
   # Processqueue
 
   function canSend ($messagedata, $userdata) {
-    if ($messagedata['sendformat'] != 'rss') return true;
     ## if it's not an RSS message, we're ok
     if (strpos($messagedata['message'],'[RSS]') === false) {
        return true;
@@ -247,7 +312,7 @@ class rssmanager extends phplistPlugin {
     
     if ($userdata['rssfrequency'] == $messagedata["rsstemplate"]) {
       $rssitems = $this->rssUserHasContent($userdata['id'],$messagedata['id'],$userdata['rssfrequency']);
-      $threshold = sprintf('%d',getConfig("rssthreshold"));
+      $threshold = sprintf('%d',getConfig("rssmanager_threshold"));
       $cansend = sizeof($rssitems) && (sizeof($rssitems) >= $threshold);
     } else {
       $cansend = false;
@@ -266,19 +331,17 @@ class rssmanager extends phplistPlugin {
  #   }
       
     $messagedata = loadMessageData($messageid); 
-    if ($messagedata['sendformat'] != 'rss') return 'NOT RSS'.$content;
     if (strpos($content,'[RSS]') === false) {
       cl_output('parseOutgoingTextMessage no placeholder');
-      return 'NO PLACEHOLDER'.$content;
+      return $content;
     }
-#    if (!in_array($messageid,$this->rssMessages)) return $content;
     $rssitems = $this->rssUserHasContent($userdata['id'], $messagedata['id'], $userdata['rssfrequency']);
     cl_output('parseOutgoingTextMessage items returned '.sizeof($rssitems).' '.$rssitems);
 
     $rssentries= array ();
     $request = join(',', $rssitems);
-    $texttemplate = getConfig('rsstexttemplate');
-    $textseparatortemplate = getConfig('rsstextseparatortemplate');
+    $texttemplate = getConfig('rssmanager_texttemplate');
+    $textseparatortemplate = getConfig('rssmanager_textseparatortemplate');
     $req= Sql_Query("select * from {$GLOBALS["tables"]["rssitem"]} where id in ($request) order by list,added");
     $curlist = '';
     while ($row= Sql_Fetch_array($req)) {
@@ -306,16 +369,14 @@ class rssmanager extends phplistPlugin {
       return $content;
     }
     $messagedata = loadMessageData($messageid); 
-    if ($messagedata['sendformat'] != 'rss') return $content;
-  #  if (!in_array($messageid,$this->rssMessages)) return $content;
     
     $rssitems = $this->rssUserHasContent($userdata['id'], $messagedata['id'], $userdata['rssfrequency']);
     cl_output('parseOutgoingHTMLMessage items returned '.sizeof($rssitems).' '.$rssitems);
 
     $rssentries = array ();
     $request = join(',', $rssitems);
-    $htmltemplate = getConfig('rsshtmltemplate');
-    $htmlseparatortemplate = getConfig('rsshtmlseparatortemplate');
+    $htmltemplate = getConfig('rssmanager_htmltemplate');
+    $htmlseparatortemplate = getConfig('rssmanager_htmlseparatortemplate');
     
     if (empty($htmltemplate)) {
       $htmltemplate = '<br/>
@@ -378,14 +439,14 @@ class rssmanager extends phplistPlugin {
     $rss= Sql_query('SELECT count(*) FROM ' . $GLOBALS['tables']['rssitem_user'] . ' where userid = ' . $user['id']);
     $rsscount= Sql_fetch_row($rss);
     if ($rsscount[0]) {
-      $list->addColumn($rowid, $GLOBALS['I18N']->get('rss'),$rsscount[0]);
+      $list->addColumn($rowid, s('rss'),$rsscount[0]);
     }
     if (!empty($user['rssfrequency'])) {
-       $list->addColumn($rowid, $GLOBALS['I18N']->get('rss freq'),$user['rssfrequency']);
+       $list->addColumn($rowid, s('rss freq'),$user['rssfrequency']);
     }
     $lastsentdate= Sql_Fetch_Row_Query("select last from {$GLOBALS['tables']['user_rss']} where userid = " . $user['id']);
     if ($lastsentdate[0]) {
-      $list->addColumn($rowid, $GLOBALS['I18N']->get('last sent'),$lastsentdate[0]);
+      $list->addColumn($rowid, s('last sent'),$lastsentdate[0]);
     }
     return true;
   }
@@ -409,9 +470,9 @@ class rssmanager extends phplistPlugin {
       # reformat string, so it wraps if it's very long
       $feed = str_replace("/","/ ",$feed);
       $feed = str_replace("&","& ",$feed);
-      return sprintf('%s: <a href="%s" target="_blank">%s</a><br /> ', $GLOBALS['I18N']->get('RSS source'),
+      return sprintf('%s: <a href="%s" target="_blank">%s</a><br /> ', s('RSS source'),
 $list['rssfeed'], $feed) .
-      PageLink2("viewrss&pi=rssmanager&id=".$list["id"],$GLOBALS['I18N']->get('(View Items)')) . '<br />';
+      PageLink2("viewrss&pi=rssmanager&id=".$list["id"],s('(View Items)')) . '<br />';
     }    
   }
 
@@ -421,14 +482,14 @@ $list['rssfeed'], $feed) .
 
     if (!empty ($list['rssfeed'])) {
       $validate= sprintf('(<a href="http://feedvalidator.org/check?url=%s" target="_blank">%s</a>)', urlencode($list['rssfeed']),
-$GLOBALS['I18N']->get('validate'));
-      $viewitems= PageLink2('viewrss&&pi=rssmanager&id=' . $list['id'], $GLOBALS['I18N']->get('View Items'));
+s('validate'));
+      $viewitems= PageLink2('viewrss&&pi=rssmanager&id=' . $list['id'], s('View Items'));
     } else {
       $list['rssfeed'] = '';
       $validate= '';
       $viewitems= '';
     }
-    return sprintf('<div>%s %s %s</div><div><input type=text name="rssfeed" value="%s" size=50></div>', $GLOBALS['I18N']->get('RSS Source'),$validate, $viewitems, htmlspecialchars($list['rssfeed']));
+    return sprintf('<div>%s %s %s</div><div><input type=text name="rssfeed" value="%s" size=50></div>', s('RSS Source'),$validate, $viewitems, htmlspecialchars($list['rssfeed']));
   }
 
   function processEditList($id) {
@@ -436,7 +497,7 @@ $GLOBALS['I18N']->get('validate'));
       return null;
 
     global $tables;
-    $query= sprintf('update %s set rssfeed = "%s" where id=%d', $tables["list"], $_POST["rssfeed"], $id);
+    $query = sprintf('update %s set rssfeed = "%s" where id=%d', $tables["list"], $_POST["rssfeed"], $id);
     return Sql_Query($query);
   }
 
@@ -457,13 +518,13 @@ $GLOBALS['I18N']->get('validate'));
       $rssOptions = array();
     }
 
-    $nippet= '<tr><td colspan=2><h1>' . $GLOBALS['I18N']->get('RSS settings') . '</h1></td></tr>';
-    $nippet .= sprintf('<tr><td valign=top>' . $GLOBALS['I18N']->get('Intro Text') .
+    $nippet= '<tr><td colspan=2><h1>' . s('RSS settings') . '</h1></td></tr>';
+    $nippet .= sprintf('<tr><td valign=top>' . s('Intro Text') .
     '</td><td><textarea name=rss_intro rows=3 cols=60>%s</textarea></td></tr>', htmlspecialchars(stripslashes($subscribePageData['rssintro'])));
     foreach ($rssfrequencies as $key => $val) {
-      $nippet .= sprintf('<tr><td colspan=2><input type=checkbox name="rss_freqOption[]" value="%s" %s> %s %s (%s <input type=radio name="rss_default" value="%s" %s>)</td></tr>', $key, in_array($key, $rssOptions) ? 'checked' : '', $GLOBALS['I18N']->get('Offer option to receive'),
-$GLOBALS['I18N']->get($val),
-$GLOBALS['I18N']->get('default'),
+      $nippet .= sprintf('<tr><td colspan=2><input type=checkbox name="rss_freqOption[]" value="%s" %s> %s %s (%s <input type=radio name="rss_default" value="%s" %s>)</td></tr>', $key, in_array($key, $rssOptions) ? 'checked' : '', s('Offer option to receive'),
+s($val),
+s('default'),
 $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
     }
     $nippet .= '<tr><td colspan=2><hr></td></tr>';
@@ -545,7 +606,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
 
       # request the rss items that match these lists and that have not been sent to this user
       $itemstosend = array ();
-      $max = sprintf('%d', getConfig('rssmax'));
+      $max = sprintf('%d', getConfig('rssmanager_max'));
       if (!$max) {
         $max = 30;
       }
@@ -565,7 +626,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
     
       #  print "<br/>Items to send for user $userid: ".sizeof($itemstosend);
       # if it is less than the threshold return nothing
-      $threshold = sprintf('%d',getConfig("rssthreshold"));
+      $threshold = sprintf('%d',getConfig("rssmanager_threshold"));
       if (1 || sizeof($itemstosend) >= $threshold)
         return $itemstosend;
       else

@@ -1,5 +1,7 @@
 <?php
 
+if (!defined('PHPLISTINIT')) exit;
+
 if (!$GLOBALS['commandline']) {
   ob_end_flush();
   if (!MANUALLY_PROCESS_RSS) {

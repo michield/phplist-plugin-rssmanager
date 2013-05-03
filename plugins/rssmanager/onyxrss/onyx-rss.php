@@ -52,13 +52,6 @@ class ONYX_RSS
     * private $type;
    */
 
-   function ONYX_RSS()
-   {
-      $this->__construct();
-   }
-
-   // Forward compatibility with PHP v.5
-   // http://www.phpvolcano.com/eide/php5.php?page=start
    function __construct()
    {
       $this->conf = array();
