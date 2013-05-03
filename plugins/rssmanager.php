@@ -19,6 +19,7 @@ class rssmanager extends phplistPlugin {
     'viewrss' => array('category' => 'campaigns'),
     'purgerss' => array('category' => 'system'),
     'delrss' => array('category' => 'develop'),
+    'testrss' => array('category' => 'develop'),
   );
   
   public $pageTitles = array(
@@ -26,6 +27,7 @@ class rssmanager extends phplistPlugin {
     "viewrss" => "View RSS entries",
     "purgerss" => "Remove outdated RSS entries",
     'delrss' => 'Delete RSS entries from DB',
+    'testrss' => 'Add some test RSS feeds'
   );
 
   var $DBstruct= array ( 
@@ -130,14 +132,15 @@ class rssmanager extends phplistPlugin {
   //  );
 
   function __construct() {
+    global $table_prefix;
     parent :: phplistplugin();
     $this->coderoot = dirname(__FILE__).'/rssmanager/';
     if (!defined('MANUALLY_PROCESS_RSS')) define('MANUALLY_PROCESS_RSS',1);
   }
 
   function activate() {
+    global $table_prefix;
     parent :: activate();
-    
 
     $GLOBALS['rssfrequencies']= array (
         #  'hourly' => $strHourly, # to be added at some other point
@@ -150,9 +153,12 @@ class rssmanager extends phplistPlugin {
   }
 
   function initialise() {
-    foreach ($this->DBstruct as $table => $structure) {
-      print $table . '<br/>';
-      Sql_Create_Table($table, $structure);
+    global $table_prefix;
+    if (!Sql_Table_exists( $table_prefix.__CLASS__.'_rssitem') ) {
+      foreach ($this->DBstruct as $table => $structure) {
+        print s('Creating table').' '.$table . '<br/>';
+        Sql_Create_Table($table_prefix.__CLASS__.'_'.$table, $structure);
+      }
     }
   }
 
@@ -162,29 +168,6 @@ class rssmanager extends phplistPlugin {
 
   function displayAbout() {
     return "&nbsp;&nbsp;&nbsp;&nbsp;using Onyx-RSS, by Ed Swindelles";  
-  }
-  ############################################################
-  # Main interface hooks
-
-  function adminmenu() {
-    if (!$this->enabled)
-      return null;
-    if (Sql_Table_exists($GLOBALS['tables']['rssitem'])) {
-      $menuitems= array ();
-      if (defined('MANUALLY_PROCESS_RSS') && MANUALLY_PROCESS_RSS) {
-        $menuitems += array (
-          'getrss' => s('Get RSS feeds'
-        ));
-      }
-      $menuitems += array (
-        'viewrss' => s('View RSS items'),
-      'purgerss' => s('Purge RSS items'));
-    } else {
-      $menuitems= array (
-        'initialise' => s('Initialise rssmanager'
-      ));
-    }
-    return $menuitems;
   }
 
   ############################################################
@@ -306,7 +289,9 @@ class rssmanager extends phplistPlugin {
     if (strpos($messagedata['message'],'[RSS]') === false) {
        return true;
     }
-    cl_output('RSS Cansend '.$userdata['rssfrequency'].' '.$messagedata["rsstemplate"]);
+    # we no longer get rssfrequency, needs to be stored elsehwere
+ #   $userdata['rssfrequency'] = 'daily';
+    cl_output('RSS Cansend freq '.$userdata['rssfrequency'].' '.$messagedata["rsstemplate"]);
     
     $this->rssMessages[] = $messagedata['id'];
     
