@@ -153,13 +153,12 @@ class rssmanager extends phplistPlugin {
   }
 
   function initialise() {
-    global $table_prefix;
-    if (!Sql_Table_exists( $table_prefix.__CLASS__.'_rssitem') ) {
-      foreach ($this->DBstruct as $table => $structure) {
-        print s('Creating table').' '.$table . '<br/>';
-        Sql_Create_Table($table_prefix.__CLASS__.'_'.$table, $structure);
-      }
-    }
+    parent::initialise();
+  }
+  
+  function upgrade($previous) {
+    parent::upgrade($previous);
+    
   }
 
   function sendFormats() {
