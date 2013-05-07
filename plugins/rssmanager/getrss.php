@@ -67,7 +67,7 @@ $nothingtodo = 1;
 $mailreport = '';
 $process_id = getPageLock();
 
-$req = Sql_Query("select rssfeed,id from {$tables['list']} where rssfeed != \"\" order by listorder");
+$req = Sql_Query("select data,listid from ".$pl->tables['listrss'].' where type = "source"');
 while ($feed = Sql_Fetch_Row($req)) {
   # this part runs per list that has a feed URL
   $nothingtodo = 0;
@@ -132,9 +132,8 @@ while ($feed = Sql_Fetch_Row($req)) {
     $mailreport .= sprintf('-> %d items, %d new items' . "\n", $itemcount, $newitemcount);
   }
   flush();
-  # purpose unkown #@B@ Remove in 2.11 if no purpose found
   Sql_Query(sprintf(
-    'INSERT INTO %s (listid,type,entered,info) ' .
+    'INSERT INTO %s (listid,type,lastmodified,data) ' .
     'VALUES(%d,"retrieval",current_timestamp,"%s")', $pl->tables["listrss"], $feed[1], $report));
   logEvent($report);
 }

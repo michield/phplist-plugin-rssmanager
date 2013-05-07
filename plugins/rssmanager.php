@@ -13,6 +13,7 @@ class rssmanager extends phplistPlugin {
     'getrss'
   );
   private $rssMessages = array();
+  private $frequency_attribute = 0;
   
   public $topMenuLinks = array(
     'getrss' => array('category' => 'system'),
@@ -60,8 +61,8 @@ class rssmanager extends phplistPlugin {
   'listrss'            => array (# rss details for a RSS source of a list
     'listid'               => array ( 'integer not null', 'List ID' ),
     'type'                => array ( 'varchar(255) not null', 'Type of this entry' ),
-    'entered'          => array ( 'datetime not null', '' ),
-    'info'                => array ( 'text', '' ),
+    'lastmodified'          => array ( 'datetime not null', '' ),
+    'data'                => array ( 'text', '' ),
     'index_1'          => array ( 'listididx (listid)', '' ),
     'index_2'          => array ( 'enteredidx (entered)', '' ),
     ) 
@@ -125,6 +126,15 @@ class rssmanager extends phplistPlugin {
       'allowempty' => 1,
       'category'=> 'composition',
     ),
+    'rssmanager_frequency_attribute' => array (
+      'value' => 0,
+      'description' => 'RSS Frequency attribute',
+      'type' => "integer",
+      'allowempty' => 1,
+      'min' => 0,
+      'max' => 999,
+      'category'=> 'subscription',
+    ),
   );
 
   //  var $configvars= array (
@@ -141,7 +151,6 @@ class rssmanager extends phplistPlugin {
   function activate() {
     global $table_prefix;
     parent :: activate();
-
     $GLOBALS['rssfrequencies']= array (
         #  'hourly' => $strHourly, # to be added at some other point
       'daily' => s('Daily'),
@@ -149,11 +158,28 @@ class rssmanager extends phplistPlugin {
       'monthly' => s('Monthly'));
       if ( phplistPlugin::isEnabled('rssmanager')  && !function_exists("xml_parse") && WARN_ABOUT_PHP_SETTINGS)
         Warn(s('noxml'));
+    $this->frequency_attribute = getConfig('rssmanager_frequency_attribute');
+
     return true;
   }
 
   function initialise() {
-    parent::initialise();
+    parent::initialise(); // will create table structure
+    
+    if (empty($this->frequency_attribute)) {
+      $req = Sql_Query(sprintf('insert into %s (name,type,tablename) values("rssfrequency","radio","rssfrequency")',
+        $GLOBALS['tables']['attribute']));
+      $att_id = Sql_Insert_Id();
+      SaveConfig('rssmanager_frequency_attribute',$att_id);
+      $query = "create table ".$GLOBALS['table_prefix']."listattr_rssfrequency (id integer not null primary key auto_increment, name varchar(255) unique,listorder integer default 0)";
+      Sql_Query($query);
+      $c = 0;
+      foreach ($GLOBALS['rssfrequencies'] as $freq => $freq_label) {
+        $c++;
+        Sql_Query('insert into '.$GLOBALS['table_prefix'].'listattr_rssfrequency (name,listorder) values("'.$freq.'",'. $c.')');
+      }
+    }
+    return $this->name. ' '.s('initialised'); 
   }
   
   function upgrade($previous) {
@@ -176,36 +202,7 @@ class rssmanager extends phplistPlugin {
     if (!$this->enabled)
       return;
 
-    global $rssfrequencies, $tables;
-    if (!empty($userID)) {
-      $current= Sql_Fetch_Row_Query("select rssfrequency from {$GLOBALS["tables"]["user"]} where id = $userID");
-      $default= $current[0];
-    } else {
-      $default= '';
-    }
-    if (!$default || !in_array($default, array_keys($rssfrequencies))) {
-      $default= $pageData['rssdefault'];
-    }
-
-    $nippet= "\n<table>";
-    $nippet .= '<tr><td>' . $pageData['rssintro'] . '</td></tr>';
-    $nippet .= '<tr><td>';
-    $options= explode(',', $pageData['rss']);
-    if (!in_array($pageData['rssdefault'], $options)) {
-      array_push($options, $pageData['rssdefault']);
-    }
-    if (sizeof($options) == 1) {
-      return sprintf('<input type="hidden" name="rssfrequency" value="%s">', $options[0]);
-    }
-
-    foreach ($options as $freq) {
-      if ($freq) {
-        $nippet .= sprintf('<input type=radio name="rssfrequency" value="%s" %s>&nbsp;%s&nbsp;', $freq, $freq == $default ? 'checked' : '', $rssfrequencies[$freq]);
-      }
-    }
-    $nippet .= '</td></tr></table>';
-
-    return $nippet;
+    return ;
   }
 
   ############################################################
@@ -250,34 +247,7 @@ class rssmanager extends phplistPlugin {
     if (!$this->enabled)
       return null;
 
-    if (!isset($_POST['rsstemplate'])) return ;
-    # mark previous RSS templates with this frequency and owner as sent
-    # this should actually be much more complex than this:
-    # templates should be allowed by list and therefore a subset of lists, but
-    # for now we leave it like this
-    # the trouble is that this may duplicate RSS messages to users, because
-    # it can cause multiple template for lists. The user_rss should handle that, but it is
-    # not guaranteed which message will be used.
-    #    Sql_Query(sprintf('update %s set status = "sent" where rsstemplate = "%s" and owner = %d',
-    #      $tables['message'],$_POST['rsstemplate'],$_SESSION['logindetails']['id']));
-
-    # with RSS message we enforce repeat
-    switch ($_POST['rsstemplate']) {
-      case 'weekly' :
-        $_POST['repeatinterval']= 10080;
-        break;
-      case 'monthly' :
-        $_POST['repeatinterval']= 40320;
-        break;
-      case 'daily' :
-      default :
-        $_POST['repeatinterval']= 1440;
-        break;
-    }
-    $_POST['repeatuntil']= date('Y-m-d H:i:00', mktime(0, 0, 0, date('m'),
-      date('d'),date('Y') + 1));
-
-    return 'RSS message, repeat set';
+    return '';
   }
 
   ############################################################
@@ -288,13 +258,19 @@ class rssmanager extends phplistPlugin {
     if (strpos($messagedata['message'],'[RSS]') === false) {
        return true;
     }
-    # we no longer get rssfrequency, needs to be stored elsehwere
- #   $userdata['rssfrequency'] = 'daily';
-    cl_output('RSS Cansend freq '.$userdata['rssfrequency'].' '.$messagedata["rsstemplate"]);
+    
+    if (empty($this->frequency_attribute)) {
+      cl_output('No attribute');exit;
+      return false;
+    }
+    
+    $userFrequency = UserAttributeValue($userdata['id'],$this->frequency_attribute);
+
+    cl_output('RSS Cansend freq '.$userFrequency.' '.$messagedata["rsstemplate"]);
     
     $this->rssMessages[] = $messagedata['id'];
     
-    if ($userdata['rssfrequency'] == $messagedata["rsstemplate"]) {
+    if ($userFrequency == $messagedata["rsstemplate"]) {
       $rssitems = $this->rssUserHasContent($userdata['id'],$messagedata['id'],$userdata['rssfrequency']);
       $threshold = sprintf('%d',getConfig("rssmanager_threshold"));
       $cansend = sizeof($rssitems) && (sizeof($rssitems) >= $threshold);
@@ -326,7 +302,7 @@ class rssmanager extends phplistPlugin {
     $request = join(',', $rssitems);
     $texttemplate = getConfig('rssmanager_texttemplate');
     $textseparatortemplate = getConfig('rssmanager_textseparatortemplate');
-    $req= Sql_Query("select * from {$GLOBALS["tables"]["rssitem"]} where id in ($request) order by list,added");
+    $req= Sql_Query("select * from ".$this->tables["rssitem"]. " where id in ($request) order by list,added");
     $curlist = '';
     while ($row= Sql_Fetch_array($req)) {
       if ($curlist != $row['list']) {
@@ -335,7 +311,7 @@ class rssmanager extends phplistPlugin {
         $rssentries['text'] .= $this->parseRSSTemplate($textseparatortemplate, $row);
       }
 
-      $data_req = Sql_Query("select * from {$GLOBALS["tables"]["rssitem_data"]} where itemid = {$row["id"]}");
+      $data_req = Sql_Query("select * from ".$this->tables["rssitem_data"] . " where itemid = {$row["id"]}");
       while ($data = Sql_Fetch_Array($data_req))
         $row[$data['tag']]= $data['data'];
 
@@ -375,7 +351,7 @@ class rssmanager extends phplistPlugin {
       ';
     
     cl_output('html template '.$htmltemplate.' '.$request);
-    $req = Sql_Query("select * from {$GLOBALS["tables"]["rssitem"]} where id in ($request) order by list,added");
+    $req = Sql_Query("select * from ".$this->tables["rssitem"] . " where id in ($request) order by list,added");
     $curlist = '';
     while ($row = Sql_Fetch_array($req)) {
       if ($curlist != $row['list']) {
@@ -384,7 +360,7 @@ class rssmanager extends phplistPlugin {
         $rssentries['html'] .= $this->parseRSSTemplate($htmlseparatortemplate, $row);
       }
 
-      $data_req= Sql_Query("select * from {$GLOBALS["tables"]["rssitem_data"]} where itemid = {$row["id"]}");
+      $data_req= Sql_Query("select * from ".$this->tables["rssitem_data"] .  " where itemid = {$row["id"]}");
       while ($data= Sql_Fetch_Array($data_req))
         $row[$data['tag']]= $data['data'];
 
@@ -405,11 +381,11 @@ class rssmanager extends phplistPlugin {
       return true;
     global $tables;
     foreach ($rssitems as $rssitemid) {
-      Sql_Query("update {$tables["rssitem"]} set $sendformat = $sendformat + 1 where id = $rssitemid");
-      Sql_Query("update {$tables['rssitem']} set processed = processed +1 where id = $rssitemid");
-      Sql_Query("replace into {$tables['rssitem_user']} (userid,itemid) values({$userdata['id']},$rssitemid)");
+      Sql_Query("update ".$this->tables["rssitem"]. " set $sendformat = $sendformat + 1 where id = $rssitemid");
+      Sql_Query("update ".$this->tables["rssitem"]. " set processed = processed +1 where id = $rssitemid");
+      Sql_Query("replace into ".$this->tables['rssitem_user']." (userid,itemid) values({$userdata['id']},$rssitemid)");
     }
-    Sql_Query("replace into {$tables["user_rss"]} (userid,last) values({$userdata['id']},date_sub(current_timestamp,interval 15 minute))");
+    Sql_Query("replace into ".$this->tables['user_rss']." (userid,last) values({$userdata['id']},date_sub(current_timestamp,interval 15 minute))");
     return true;
   }
 
@@ -420,15 +396,17 @@ class rssmanager extends phplistPlugin {
     if (!$this->enabled)
       return null;
 
-    $rss= Sql_query('SELECT count(*) FROM ' . $GLOBALS['tables']['rssitem_user'] . ' where userid = ' . $user['id']);
+    $rss= Sql_query('SELECT count(*) FROM ' . $this->tables['rssitem_user'] . ' where userid = ' . $user['id']);
     $rsscount= Sql_fetch_row($rss);
     if ($rsscount[0]) {
       $list->addColumn($rowid, s('rss'),$rsscount[0]);
     }
-    if (!empty($user['rssfrequency'])) {
-       $list->addColumn($rowid, s('rss freq'),$user['rssfrequency']);
+    $userFrequency = UserAttributeValue($user['id'],$this->frequency_attribute);
+    
+    if (!empty($userFrequency)) {
+       $list->addColumn($rowid, s('rss freq'),$userFrequency);
     }
-    $lastsentdate= Sql_Fetch_Row_Query("select last from {$GLOBALS['tables']['user_rss']} where userid = " . $user['id']);
+    $lastsentdate= Sql_Fetch_Row_Query("select last from ".$this->tables['user_rss']." where userid = " . $user['id']);
     if ($lastsentdate[0]) {
       $list->addColumn($rowid, s('last sent'),$lastsentdate[0]);
     }
@@ -438,8 +416,7 @@ class rssmanager extends phplistPlugin {
   function deleteUser($id) {
     if (!$this->enabled)
       return null;
-    global $tables;
-    return Sql_Query(sprintf('delete from %s where userid = %d', $tables['user_rss'], $id));
+    return Sql_Query(sprintf('delete from %s where userid = %d', $this->tables['user_rss'], $id));
   }
   
   ############################################################
@@ -464,24 +441,26 @@ $list['rssfeed'], $feed) .
     if (!$this->enabled)
       return null;
 
-    if (!empty ($list['rssfeed'])) {
-      $validate= sprintf('(<a href="http://feedvalidator.org/check?url=%s" target="_blank">%s</a>)', urlencode($list['rssfeed']),
+    $source = Sql_Fetch_Assoc_Query(sprintf('select data from %s where listid = %d and type="source"',
+      $this->tables["listrss"], $list['id']));
+    $rssSource = $source['data'];
+
+    if (!empty ($rssSource)) {
+      $validate= sprintf('(<a href="http://feedvalidator.org/check?url=%s" target="_blank">%s</a>)', urlencode($rssSource),
 s('validate'));
       $viewitems= PageLink2('viewrss&&pi=rssmanager&id=' . $list['id'], s('View Items'));
     } else {
-      $list['rssfeed'] = '';
       $validate= '';
       $viewitems= '';
     }
-    return sprintf('<div>%s %s %s</div><div><input type=text name="rssfeed" value="%s" size=50></div>', s('RSS Source'),$validate, $viewitems, htmlspecialchars($list['rssfeed']));
+    return sprintf('<div><label for="rssfeed">%s</label> %s %s</div><div><input type=text name="rssfeed" value="%s" /></div>', s('RSS Source'),$validate, $viewitems, htmlspecialchars($rssSource));
   }
 
   function processEditList($id) {
     if (!$this->enabled)
       return null;
 
-    global $tables;
-    $query = sprintf('update %s set rssfeed = "%s" where id=%d', $tables["list"], $_POST["rssfeed"], $id);
+    $query = sprintf('replace into %s set listid = %d, type="source",data = "%s",lastmodified = now()', $this->tables["listrss"], $id,sql_escape($_POST["rssfeed"]));
     return Sql_Query($query);
   }
 
@@ -565,7 +544,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
     }
 
     $cansend_req = Sql_Query(sprintf('select date_add(last,%s) < current_timestamp FROM %s 
-       where userid = %d', $interval, $tables['user_rss'], $userid));
+       where userid = %d', $interval, $this->tables['user_rss'], $userid));
     $exists = Sql_Affected_Rows();
     $cansend = Sql_Fetch_Row($cansend_req);
     if (!$exists || $cansend[0]) {
@@ -595,10 +574,10 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
         $max = 30;
       }
       $itemreq = Sql_Query("
-        select rssitem.* from {$tables["rssitem"]} as rssitem
+        select rssitem.* from ".$this->tables["rssitem"]. " as rssitem
         where rssitem.list in ($liststosend) ORDER BY added desc, list, title LIMIT $max");
       while ($item = Sql_Fetch_Array($itemreq)) {
-        Sql_Query("SELECT * FROM {$tables["rssitem_user"]} WHERE itemid = {$item["id"]} AND userid = $userid");
+        Sql_Query("SELECT * FROM ".$this->tables["rssitem_user"]. " WHERE itemid = {$item["id"]} AND userid = $userid");
         if (!Sql_Affected_Rows()) {
           array_push($itemstosend, $item['id']);
         }

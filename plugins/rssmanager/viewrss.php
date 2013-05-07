@@ -5,7 +5,14 @@ if (isset($_GET['start'])) {
 } else {
   $start = 0;
 }
+if (isset($_GET['id'])) {
+  $id = sprintf('%d',$_GET['id']);
+} else {
+  $id = 0;
+}
+
 $pl = $GLOBALS['plugins']['rssmanager'];
+$pagingurl = '';
 
 if ($GLOBALS["require_login"] && !isSuperUser()) {
   $access = accessLevel("viewrss");
@@ -13,10 +20,10 @@ if ($GLOBALS["require_login"] && !isSuperUser()) {
   switch ($access) {
     case "owner" :
       $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $tables["list"] . ".id and " . $tables["list"] . ".owner = " . $_SESSION["logindetails"]["id"];
-      if ($_GET["id"]) {
-        $pagingurl = '&id=' . $_GET["id"];
-        $subselect .= " and " . $pl->tables["rssitem"] . ".list = " . $_GET["id"];
-        print "RSS items for " . ListName($_GET["id"]) . "<br/>";
+      if ($id) {
+        $pagingurl = '&id=' . $id;
+        $subselect .= " and " . $pl->tables["rssitem"] . ".list = " . $id;
+        print "<h3>".s('RSS items for list').' ' . ListName($id) . "</h3>";
       }
       break;
     case "all" :
@@ -30,10 +37,10 @@ if ($GLOBALS["require_login"] && !isSuperUser()) {
 } else {
   $querytables = $pl->tables["rssitem"];
   $subselect = "";
-  if (isset($_GET["id"]) && $_GET["id"]) {
-    $pagingurl = '&id=' . $_GET["id"];
-    $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $_GET["id"];
-    print "RSS items for " . ListName($_GET["id"]) . "<br/>";
+  if ($id) {
+    $pagingurl = '&id=' .$id;
+    $subselect = "where " . $pl->tables["rssitem"] . ".list = " . $id;
+    print "<h3>".s('RSS items for list').' ' . ListName($id) . "</h3>";
   }
 }
 
@@ -54,7 +61,7 @@ if (isset ($start) && $start > 0) {
 }
 $paging = '';
 if ($total > MAX_MSG_PP) {
-  $paging = simplePaging("viewrss",$start,$total,MAX_MSG_PP,s("RSS items"));
+  $paging = simplePaging("viewrss$pagingurl",$start,$total,MAX_MSG_PP,s("RSS items"));
 }
   
 $ls = new WebblerListing(s('RSS items'));
