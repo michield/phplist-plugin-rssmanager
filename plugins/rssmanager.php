@@ -13,6 +13,9 @@ class rssmanager extends phplistPlugin {
     'getrss'
   );
   private $rssMessages = array();
+  
+  private $rssFrequencies = array('daily','weekly','monthly');
+  
   private $frequency_attribute = 0;
   
   public $topMenuLinks = array(
@@ -151,12 +154,12 @@ class rssmanager extends phplistPlugin {
   function activate() {
     global $table_prefix;
     parent :: activate();
-    $GLOBALS['rssfrequencies']= array (
+    $GLOBALS['rssfrequencies'] = array (
         #  'hourly' => $strHourly, # to be added at some other point
       'daily' => s('Daily'),
       'weekly' => s('Weekly'),
       'monthly' => s('Monthly'));
-      if ( phplistPlugin::isEnabled('rssmanager')  && !function_exists("xml_parse") && WARN_ABOUT_PHP_SETTINGS)
+    if ( phplistPlugin::isEnabled('rssmanager') && !function_exists("xml_parse") && WARN_ABOUT_PHP_SETTINGS)
         Warn(s('noxml'));
     $this->frequency_attribute = getConfig('rssmanager_frequency_attribute');
 
@@ -174,7 +177,7 @@ class rssmanager extends phplistPlugin {
       $query = "create table ".$GLOBALS['table_prefix']."listattr_rssfrequency (id integer not null primary key auto_increment, name varchar(255) unique,listorder integer default 0)";
       Sql_Query($query);
       $c = 0;
-      foreach ($GLOBALS['rssfrequencies'] as $freq => $freq_label) {
+      foreach ($this->rssFrequencies as $freq) {
         $c++;
         Sql_Query('insert into '.$GLOBALS['table_prefix'].'listattr_rssfrequency (name,listorder) values("'.$freq.'",'. $c.')');
       }
@@ -220,18 +223,18 @@ class rssmanager extends phplistPlugin {
   ############################################################
   # Message
 
-  function sendMessageTab($messageid= 0, $data= array ()) {
+  function sendMessageTab($messageid = 0, $data = array ()) {
     if (!$this->enabled)
       return null;
 
     global $rssfrequencies;
 
-    $nippet= s('If you want to use this message as the template for sending RSS feeds
+    $nippet = s('If you want to use this message as the template for sending RSS feeds
     select the frequency it should be used for and use [RSS] in your message to indicate where the list of items needs to go.');
     $nippet .= '<br />';
     $nippet .= '<input type=radio name="rsstemplate" value="none">' . s('No RSS') . ' ';
-    foreach ($rssfrequencies as $key => $val) {
-      $nippet .= sprintf('<input type=radio name="rsstemplate" value="%s" %s>%s ', $key, $data['rsstemplate'] == $key ? 'checked' : '', $val);
+    foreach ($this->rssFrequencies as $freq) {
+      $nippet .= sprintf('<input type=radio name="rsstemplate" value="%s" %s>%s ', $freq, $data['rsstemplate'] == $freq ? 'checked' : '', $freq);
     }
     return $nippet;
   }
@@ -518,7 +521,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
         $template= preg_replace('#\[' . preg_quote($key) . '\]#i', $val, $template);
       }
     }
-    $template= preg_replace("/[[A-Z\. ]+\]/i", '', $template);
+    $template = preg_replace("/[[A-Z\. ]+\]/i", '', $template);
     return $template;
   }
 
@@ -554,7 +557,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
       # check what lists to use. This is the intersection of the lists for the
       # user and the lists for the message
       $lists = array ();
-      $listsreq = Sql_Verbose_Query(sprintf('
+      $listsreq = Sql_Query(sprintf('
         select listuser.listid from %s listuser, %s listmessage
         where listuser.listid = listmessage.listid and listuser.userid = %d and listmessage.messageid = %d',
         $tables['listuser'], $tables['listmessage'], $userid, $messageid));
