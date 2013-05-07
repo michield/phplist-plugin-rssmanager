@@ -13,7 +13,7 @@ if (!$GLOBALS['commandline']) {
 } else {
   ob_end_clean();
   print ClineSignature();
-  print $GLOBALS['I18N']->get('Getting and Parsing the RSS sources') . "\n";
+  print s('Getting and Parsing the RSS sources') . "\n";
   ob_start();
 }
 
@@ -67,11 +67,12 @@ $nothingtodo = 1;
 $mailreport = '';
 $process_id = getPageLock();
 
-$req = Sql_Query("select data,listid from ".$pl->tables['listrss'].' where type = "source"');
+$req = Sql_Query("select data,listid from ".$pl->tables['listrss'].' where name = "source"');
 while ($feed = Sql_Fetch_Row($req)) {
   # this part runs per list that has a feed URL
   $nothingtodo = 0;
   output('<hr/>' . $GLOBALS['I18N']->get('Parsing') . ' ' . $feed[0] . '..');
+  cl_output(s('Parsing') . ' ' . $feed[0] . '..');
   //flush();
   flushBrowser();
   $report = $GLOBALS['I18N']->get('Parsing') . ' ' . $feed[0];
@@ -80,7 +81,7 @@ while ($feed = Sql_Fetch_Row($req)) {
   $newitemcount = 0;
   $rss = new ONYX_RSS();
   $rss->setDebugMode(true);
-  $rss->setCachePath($tmpdir);
+  $rss->setCachePath($GLOBALS['tmpdir']);
   keepLock($process_id);
 
   # get new items in cache
@@ -89,9 +90,11 @@ while ($feed = Sql_Fetch_Row($req)) {
     $report .= ' ' . $GLOBALS['I18N']->get('ok') . "\n";
     $mailreport .= " 'ok ";
     output('..' . $GLOBALS['I18N']->get('ok') . '<br />');
+    cl_output('..' . s('ok'));
   } else {
     $report .= ' ' . $GLOBALS['I18N']->get('failed') . "\n";
     output('..' . $GLOBALS['I18N']->get('failed') . '<br />');
+    cl_output('..' . s('failed'));
     $mailreport .= ' ' . $GLOBALS['I18N']->get('failed') . "\n";
     $mailreport .= $rss->lasterror;
     $failreport .= "\n" . $feed[0] . ' ' . $GLOBALS['I18N']->get('failed') . "\n" . $rss->lasterror;
@@ -129,6 +132,7 @@ while ($feed = Sql_Fetch_Row($req)) {
     }
     output(sprintf('<br/>%d %s, %d %s', $itemcount, s('items'), $newitemcount, s('new items')));
     $report .= sprintf('%d items, %d new items' . "\n", $itemcount, $newitemcount);
+    cl_output(sprintf('%d items, %d new items' . "\n", $itemcount, $newitemcount));
     $mailreport .= sprintf('-> %d items, %d new items' . "\n", $itemcount, $newitemcount);
   }
   flush();
