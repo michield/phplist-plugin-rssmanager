@@ -7,9 +7,11 @@ $testfeeds = array(
 );
 
 foreach ($testfeeds as $name => $url) {
+  print s('Adding').' '.$name.'<br/>';
   $exists = Sql_Fetch_Row_Query('select id from '.$tables['list']. ' where name = "'.$name.'"');
   if (empty($exists[0])) {
     Sql_Query('insert into '.$tables['list']. '(name,description,entered,rssfeed,modified,active,category)
       values("'.$name.'","'.$name.'",now(),"'.$url.'",now(),1, "RSS")');
   }
 }
+
