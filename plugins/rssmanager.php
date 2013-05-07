@@ -24,6 +24,7 @@ class rssmanager extends phplistPlugin {
     'purgerss' => array('category' => 'system'),
     'delrss' => array('category' => 'develop'),
     'testrss' => array('category' => 'develop'),
+    'init' => array('category' => 'develop'),
   );
   
   public $pageTitles = array(
@@ -31,7 +32,8 @@ class rssmanager extends phplistPlugin {
     "viewrss" => "View RSS entries",
     "purgerss" => "Remove outdated RSS entries",
     'delrss' => 'Delete RSS entries from DB',
-    'testrss' => 'Add some test RSS feeds'
+    'testrss' => 'Add some test RSS feeds',
+    'init' => 'Initialise DB',
   );
 
   var $DBstruct= array ( 
@@ -63,11 +65,12 @@ class rssmanager extends phplistPlugin {
   ),
   'listrss'            => array (# rss details for a RSS source of a list
     'listid'               => array ( 'integer not null', 'List ID' ),
-    'type'                => array ( 'varchar(255) not null', 'Type of this entry' ),
+    'name'                => array ( 'varchar(255) not null', 'Name of this entry' ),
     'lastmodified'          => array ( 'datetime not null', '' ),
     'data'                => array ( 'text', '' ),
+    'primary key'          => array ( '(listid,name)', '' ),
     'index_1'          => array ( 'listididx (listid)', '' ),
-    'index_2'          => array ( 'enteredidx (entered)', '' ),
+    'index_2'          => array ( 'enteredidx (lastmodified)', '' ),
     ) 
   );
  
@@ -444,7 +447,7 @@ $list['rssfeed'], $feed) .
     if (!$this->enabled)
       return null;
 
-    $source = Sql_Fetch_Assoc_Query(sprintf('select data from %s where listid = %d and type="source"',
+    $source = Sql_Fetch_Assoc_Query(sprintf('select data from %s where listid = %d and name="source"',
       $this->tables["listrss"], $list['id']));
     $rssSource = $source['data'];
 
@@ -463,7 +466,7 @@ s('validate'));
     if (!$this->enabled)
       return null;
 
-    $query = sprintf('replace into %s set listid = %d, type="source",data = "%s",lastmodified = now()', $this->tables["listrss"], $id,sql_escape($_POST["rssfeed"]));
+    $query = sprintf('replace into %s set listid = %d, name="source",data = "%s",lastmodified = now()', $this->tables["listrss"], $id,sql_escape($_POST["rssfeed"]));
     return Sql_Query($query);
   }
 

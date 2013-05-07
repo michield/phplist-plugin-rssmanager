@@ -133,8 +133,8 @@ while ($feed = Sql_Fetch_Row($req)) {
   }
   flush();
   Sql_Query(sprintf(
-    'INSERT INTO %s (listid,type,lastmodified,data) ' .
-    'VALUES(%d,"retrieval",current_timestamp,"%s")', $pl->tables["listrss"], $feed[1], $report));
+    'replace into %s (listid,name,lastmodified,data) ' .
+    'values(%d,"last",current_timestamp,"%s")', $pl->tables["listrss"], $feed[1], $report));
   logEvent($report);
 }
 if ($nothingtodo) {
