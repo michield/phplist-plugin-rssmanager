@@ -14,7 +14,12 @@ class rssmanager extends phplistPlugin {
   );
   private $rssMessages = array();
   
-  private $rssFrequencies = array('daily','weekly','monthly');
+  private $rssFrequencies = array(
+    'daily' => array('caption' => 'Daily', 'interval' => '1 day', 'order' => 1),
+    'weekly' => array('caption' => 'Weekly', 'interval' => '1 week', 'order' => 2),
+    'monthly' => array('caption' => 'Monthly', 'interval' => '1 month', 'order' => 3),
+    'hourly' => array('caption' => 'Hourly', 'interval' => '1 hour', 'order' => 4)
+  );
   
   private $frequency_attribute = 0;
   
@@ -187,10 +192,9 @@ class rssmanager extends phplistPlugin {
       SaveConfig('rssmanager_frequency_attribute',$att_id);
       $query = "create table if not exists ".$GLOBALS['table_prefix']."listattr_rssfrequency (id integer not null primary key auto_increment, name varchar(255) unique,listorder integer default 0)";
       Sql_Query($query);
-      $c = 0;
-      foreach ($this->rssFrequencies as $freq) {
-        $c++;
-        Sql_Query('insert ignore into '.$GLOBALS['table_prefix'].'listattr_rssfrequency (name,listorder) values("'.$freq.'",'. $c.')');
+
+      foreach ($this->rssFrequencies as $key => $value) {
+        Sql_Query('insert ignore into '.$GLOBALS['table_prefix'].'listattr_rssfrequency (name,listorder) values("'. $key . '",'. $value['order'] . ')');
       }
     }
     return $this->name. ' '.s('initialised'); 
@@ -238,14 +242,13 @@ class rssmanager extends phplistPlugin {
     if (!$this->enabled)
       return null;
 
-    global $rssfrequencies;
-
     $nippet = s('If you want to use this message as the template for sending RSS feeds
     select the frequency it should be used for and use [RSS] in your message to indicate where the list of items needs to go.');
     $nippet .= '<br />';
-    $nippet .= '<input type=radio name="rsstemplate" value="none">' . s('No RSS') . ' ';
-    foreach ($this->rssFrequencies as $freq) {
-      $nippet .= sprintf('<input type=radio name="rsstemplate" value="%s" %s>%s ', $freq, $data['rsstemplate'] == $freq ? 'checked' : '', $freq);
+    $noRssSelected = isset($data['rsstemplate']) && $data['rsstemplate'] != 'none' ? '' : 'checked';
+    $nippet .= sprintf('<input type=radio name="rsstemplate" value="none" %s>', $noRssSelected) . s('No RSS') . ' ';
+    foreach ($this->rssFrequencies as $key => $value) {
+      $nippet .= sprintf('<input type=radio name="rsstemplate" value="%s" %s>%s ', $key, $data['rsstemplate'] == $key ? 'checked' : '', $value['caption']);
     }
     return $nippet;
   }
@@ -280,12 +283,12 @@ class rssmanager extends phplistPlugin {
     
     $userFrequency = UserAttributeValue($userdata['id'],$this->frequency_attribute);
 
-    cl_output('RSS Cansend freq '.$userFrequency.' '.$messagedata["rsstemplate"]);
+    cl_output('RSS Can send freq '.$userFrequency.' '.$messagedata["rsstemplate"]);
     
-    $this->rssMessages[] = $messagedata['id'];
+    $this->rssMessages[$messagedata['id']] = 1;
     
     if ($userFrequency == $messagedata["rsstemplate"]) {
-      $rssitems = $this->rssUserHasContent($userdata['id'],$messagedata['id'],$userdata['rssfrequency']);
+      $rssitems = $this->rssUserHasContent($userdata['id'],$messagedata['id'],$userFrequency);
       $threshold = sprintf('%d',getConfig("rssmanager_threshold"));
       $cansend = sizeof($rssitems) && (sizeof($rssitems) >= $threshold);
     } else {
@@ -353,7 +356,6 @@ class rssmanager extends phplistPlugin {
     
     $rssitems = $this->rssUserHasContent($userdata['id'], $messagedata['id'], $userFrequency);
   #  cl_output('parseOutgoingHTMLMessage items returned '.sizeof($rssitems).' '.$rssitems);
-var_dump($userdata);
     if (empty($rssitems)) return $content;
 
     $rssentries = array ('html' => '');
@@ -374,7 +376,7 @@ var_dump($userdata);
       ';
     
 #    cl_output('html template '.$htmltemplate.' '.$request);
-    $req = Sql_Query("select * from ".$this->tables["rssitem"] . " where id in ($request) order by list,added");
+    $req = Sql_Query("select * from ".$this->tables["rssitem"] . " where id in ($request) order by list, id DESC");
     $curlist = '';
     while ($row = Sql_Fetch_array($req)) {
       if ($curlist != $row['list']) {
@@ -398,7 +400,9 @@ var_dump($userdata);
       return null;
     if (!$success)
       return true;
-    if (!in_array($messageid,$this->rssMessages)) return true;
+
+    if (!isset($this->rssMessages[$messageid]))
+        return true;
     $userFrequency = UserAttributeValue($userdata['id'],$this->frequency_attribute);
     
     $rssitems = $this->rssUserHasContent($userdata['id'], $messageid, $userFrequency);
@@ -428,7 +432,7 @@ var_dump($userdata);
     $userFrequency = UserAttributeValue($user['id'],$this->frequency_attribute);
     
     if (!empty($userFrequency)) {
-       $list->addColumn($rowid, s('rss freq'),$userFrequency);
+       $list->addColumn($rowid, s('rss freq'),$this->rssFrequencies[$userFrequency]['caption']);
     }
     $lastsentdate= Sql_Fetch_Row_Query("select last from ".$this->tables['user_rss']." where userid = " . $user['id']);
     if ($lastsentdate[0]) {
@@ -456,7 +460,7 @@ var_dump($userdata);
       $feed = str_replace("/","/ ",$feed);
       $feed = str_replace("&","& ",$feed);
       return sprintf('%s: <a href="%s" target="_blank">%s</a><br /> ', s('RSS source'),
-$list['rssfeed'], $feed) .
+        $list['rssfeed'], $feed) .
       PageLink2("viewrss&pi=rssmanager&id=".$list["id"],s('(View Items)')) . '<br />';
     }    
   }
@@ -470,23 +474,29 @@ $list['rssfeed'], $feed) .
     $rssSource = $source['data'];
 
     if (!empty ($rssSource)) {
-      $validate= sprintf('(<a href="http://feedvalidator.org/check?url=%s" target="_blank">%s</a>)', urlencode($rssSource),
-s('validate'));
+      $validate = sprintf(
+        '(<a href="http://feedvalidator.org/check?url=%s" target="_blank">%s</a>)', urlencode($rssSource),
+        s('validate')
+      );
       $viewitems= PageLink2('viewrss&&pi=rssmanager&id=' . $list['id'], s('View Items'));
     } else {
       $validate= '';
       $viewitems= '';
     }
-    return sprintf('<div><label for="rssfeed">%s</label> %s %s</div><div><input type=text name="rssfeed" value="%s" /></div>', s('RSS Source'),$validate, $viewitems, htmlspecialchars($rssSource));
+    return sprintf(
+        '<div><label for="rssfeed">%s</label> %s %s</div><div><input type=text name="rssfeed" value="%s" /></div>',
+        s('RSS Source'),$validate, $viewitems, htmlspecialchars($rssSource)
+    );
   }
 
-  function processEditList($id) {
-    if (!$this->enabled)
-      return null;
+    function processEditList($id) {
 
-    $query = sprintf('replace into %s set listid = %d, name="source",data = "%s",lastmodified = now()', $this->tables["listrss"], $id,sql_escape($_POST["rssfeed"]));
-    return Sql_Query($query);
-  }
+        $query = sprintf(
+            'replace into %s set listid = %d, name="source",data = "%s",lastmodified = now()',
+            $this->tables["listrss"], $id,sql_escape($_POST["rssfeed"])
+        );
+        return Sql_Query($query);
+    }
 
   ############################################################
   # Subscribe page
@@ -497,7 +507,6 @@ s('validate'));
     # purpose: return tablerows with subscribepage options for this list
     # Currently used in spageedit.php
     # 200710 Bas
-    global $rssfrequencies; //, $rss;
 
     if (isset($subscribePageData['rss'])) {
       $rssOptions = explode(",",$subscribePageData["rss"]);
@@ -505,16 +514,19 @@ s('validate'));
       $rssOptions = array();
     }
 
-    $nippet= '<tr><td colspan=2><h1>' . s('RSS settings') . '</h1></td></tr>';
+    $nippet= '<h1>' . s('RSS settings') . '</h1><table><tbody>';
     $nippet .= sprintf('<tr><td valign=top>' . s('Intro Text') .
     '</td><td><textarea name=rss_intro rows=3 cols=60>%s</textarea></td></tr>', htmlspecialchars(stripslashes($subscribePageData['rssintro'])));
-    foreach ($rssfrequencies as $key => $val) {
-      $nippet .= sprintf('<tr><td colspan=2><input type=checkbox name="rss_freqOption[]" value="%s" %s> %s %s (%s <input type=radio name="rss_default" value="%s" %s>)</td></tr>', $key, in_array($key, $rssOptions) ? 'checked' : '', s('Offer option to receive'),
-s($val),
-s('default'),
-$key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
+    foreach ($this->rssFrequencies as $key => $value) {
+      $nippet .= sprintf(
+        '<tr><td colspan=2><input type=checkbox name="rss_freqOption[]" value="%s" %s> %s %s (%s <input type=radio name="rss_default" value="%s" %s>)<br></td></tr>',
+        $key, in_array($key, $rssOptions) ? 'checked' : '', s('Offer option to receive'),
+        s($value['caption']),
+        s('default'),
+        $key, $subscribePageData['rssdefault'] == $key ? 'checked' : ''
+      );
     }
-    $nippet .= '<tr><td colspan=2><hr></td></tr>';
+    $nippet .= '<tr><td colspan=2><hr></td></tr></tbody></table>';
     return $nippet;
   }
 
@@ -554,18 +566,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
 #    cl_output('rssUserHasContent');
 #    if (!in_array($messageid,$this->rssMessages)) return $content;
     # get selection string for mysql data_add function
-    switch ($frequency) {
-      case 'weekly' : 
-        $interval = 'interval 7 day';
-        break;
-      case 'monthly' :
-        $interval = 'interval 1 month';
-        break;
-      case 'daily' :
-      default :
-        $interval = 'interval 1 day';
-        break;
-    }
+    $interval = 'INTERVAL ' . $this->rssFrequencies[$frequency]['interval'];
 
     $cansend_req = Sql_Query(sprintf('select date_add(last,%s) < current_timestamp FROM %s 
        where userid = %d', $interval, $this->tables['user_rss'], $userid));
@@ -599,7 +600,7 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
       }
       $itemreq = Sql_Query("
         select rssitem.* from ".$this->tables["rssitem"]. " as rssitem
-        where rssitem.list in ($liststosend) ORDER BY added desc, list, title LIMIT $max");
+        where rssitem.list in ($liststosend) ORDER BY id DESC, list, title LIMIT $max");
       while ($item = Sql_Fetch_Array($itemreq)) {
         Sql_Query("SELECT * FROM ".$this->tables["rssitem_user"]. " WHERE itemid = {$item["id"]} AND userid = $userid");
         if (!Sql_Affected_Rows()) {
@@ -607,7 +608,6 @@ $key, $subscribePageData['rssdefault'] == $key ? 'checked' : '');
         }
       }
       $items = join(',',$itemstosend);
-   #   cl_output('Num items: '.sizeof($itemstosend).' '.$items);
       #  return $itemstosend;
       
     
